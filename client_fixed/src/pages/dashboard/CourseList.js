@@ -983,7 +983,7 @@
 
 
 // client/src/pages/dashboard/CourseList.js
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -992,7 +992,6 @@ import {
   Clock,
   Award,
   Users,
-  CheckCircle,
   Star,
   TrendingUp,
   Play,
@@ -1034,11 +1033,7 @@ export default function CourseList() {
   const [selectedDifficulty, setSelectedDifficulty] = useState("All Levels");
   const [enrolling, setEnrolling] = useState(null);
 
-  useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
-
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     try {
       const params = {};
 
@@ -1059,7 +1054,11 @@ export default function CourseList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategory, selectedDifficulty, searchTerm]);
+
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
 
   const handleEnrollCourse = async (courseId) => {
     setEnrolling(courseId);

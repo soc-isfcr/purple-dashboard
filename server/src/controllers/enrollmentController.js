@@ -1292,33 +1292,46 @@ export const getOngoingEnrollments = async (req, res, next) => {
 
     const enrollments = await Enrollment.find({
       $or: [{ userId }, { user: userId }],
-      status: { $in: ["active", "ongoing"] }
+      status: { $in: ["active", "ongoing", "completed", "finished"] }
     }).populate("courseId");
 
     console.log(`[Enrollment] Found ${enrollments.length} enrollments`);
 
-    // Trigger a background progress sync for each enrollment to ensure dashboard is accurate
     const { updateCourseProgress } = await import("./progressController.js")
+    const { default: Certificate } = await import("../models/Certificate.js");
+
     const courses = await Promise.all(enrollments.map(async (e) => {
-      if (!e.courseId) {
-        console.warn(`[Enrollment] Enrollment ${e._id} has no courseId`);
-        return null;
-      }
+      const courseId = e.courseId?._id || e.courseId;
+      if (!courseId) return null;
 
       try {
-        // Background sync - ensure progress is up to date
-        const p = await updateCourseProgress(userId, e.courseId._id)
+        const p = await updateCourseProgress(userId, courseId)
+        const prog = p ? p.overallProgress : (e.progress || 0);
+
+        // Check for certificate
+        const hasCertificate = await Certificate.exists({
+          $and: [
+            { $or: [{ userId }, { user: userId }] },
+            { $or: [{ courseId: courseId }, { course: courseId }] }
+          ]
+        });
+
+        // Mutually exclusive: NOT ongoing if 100% AND has cert
+        if (prog >= 100 && hasCertificate) {
+          return null;
+        }
 
         return {
           ...e.courseId.toObject(),
-          progress: p ? p.overallProgress : (e.progress || 0)
+          progress: prog,
+          status: e.status
         }
       } catch (err) {
-        console.error(`[Enrollment] Error syncing progress for course ${e.courseId._id}:`, err);
-        // Return course data even if progress sync fails
+        console.error(`[Enrollment] Error syncing progress for ongoing course ${courseId}:`, err);
         return {
           ...e.courseId.toObject(),
-          progress: e.progress || 0
+          progress: e.progress || 0,
+          status: e.status
         }
       }
     }))
@@ -1405,7 +1418,10 @@ export const getCompletedEnrollments = async (req, res, next) => {
     }));
 
     const validCourses = courses.filter(c => c !== null);
-    console.log(`[Enrollment] Returning ${validCourses.length} verified completed courses`);
+    console.log(`[Enrollment] Returning ${validCourses.length} verified completed courses for user ${userId}`);
+    if (validCourses.length === 0 && enrollments.length > 0) {
+      console.log(`[Enrollment] Note: ${enrollments.length} enrollments found but 0 passed strict completion (100% progress + cert)`);
+    }
 
     sendResponse(res, 200, "Completed courses fetched", validCourses);
   } catch (err) {

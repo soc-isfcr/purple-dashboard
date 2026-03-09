@@ -66,7 +66,7 @@ export const userDashboard = async (req, res, next) => {
         enrollmentType: enrollmentType // Internal flag for robust state management
       };
 
-      if (e.status === "completed" || currentProgress >= 100) {
+      if (currentProgress >= 100 && hasCertificate) {
         item.completedAt = e.completedAt || new Date();
         item.status = "completed";
         completed.push(item);

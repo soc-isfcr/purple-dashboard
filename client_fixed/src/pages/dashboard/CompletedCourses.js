@@ -826,8 +826,7 @@ export default function CompletedCourses() {
   if (loading) return <div className="text-center py-8">Loading...</div>
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold mb-6">Completed Courses</h2>
+    <div className="space-y-4 pt-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {courses.map((course) => (
           <Card key={course._id} className="p-6">
