@@ -796,25 +796,38 @@
 //client/src/pages/dashboard/CompletedCourses.js
 import { useEffect, useState } from "react"
 import { Card } from "../../components/Layouts/Card"
-import { CheckCircle } from "lucide-react"
+import { CheckCircle, BookOpen, Calendar } from "lucide-react"
 
 export default function CompletedCourses() {
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     const fetchCompletedCourses = async () => {
       try {
         const token = localStorage.getItem("token")
-        const response = await fetch("/api/enrollments/completed", {
+        console.log("[CompletedCourses] Fetching dashboard for completed list...")
+
+        // Use the dashboard endpoint which reliably returns completed courses
+        const response = await fetch("/api/dashboard/user", {
           headers: { Authorization: `Bearer ${token}` },
         })
-        if (response.ok) {
-          const result = await response.json()
-          setCourses(result.data || result)
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
+
+        const result = await response.json()
+        console.log("[CompletedCourses] Dashboard result:", result)
+
+        // Dashboard returns completed courses under result.data.completed
+        const completedList = result?.data?.completed || []
+        console.log(`[CompletedCourses] Found ${completedList.length} completed courses`)
+        setCourses(completedList)
       } catch (error) {
-        console.error("Error fetching completed courses:", error)
+        console.error("[CompletedCourses] Error fetching completed courses:", error)
+        setError("Failed to load completed courses. Please try again.")
       } finally {
         setLoading(false)
       }
@@ -823,22 +836,49 @@ export default function CompletedCourses() {
     fetchCompletedCourses()
   }, [])
 
-  if (loading) return <div className="text-center py-8">Loading...</div>
+  if (loading) return (
+    <div className="flex items-center justify-center py-16">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500"></div>
+    </div>
+  )
+
+  if (error) return (
+    <div className="text-center py-8 text-red-400">{error}</div>
+  )
+
+  if (courses.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-gray-400 space-y-3">
+      <BookOpen size={48} className="opacity-30" />
+      <p className="text-lg font-medium">No completed courses yet</p>
+      <p className="text-sm">Complete a course and generate your certificate to see it here.</p>
+    </div>
+  )
 
   return (
     <div className="space-y-4 pt-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {courses.map((course) => (
-          <Card key={course._id} className="p-6">
-            <div className="flex items-start justify-between">
+          <Card key={course.courseId || course.id} className="p-6">
+            <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold mb-2">{course.title}</h3>
-                <p className="text-gray-600 text-sm mb-2">{course.description}</p>
-                <p className="text-sm text-gray-500">
-                  Completed on {new Date(course.completedAt || course.updatedAt).toLocaleDateString()}
-                </p>
+                <h3 className="text-lg font-semibold mb-1">{course.course || course.title || "Untitled Course"}</h3>
+                {course.description && (
+                  <p className="text-gray-500 text-sm mb-2">{course.description}</p>
+                )}
+                {course.completedAt && (
+                  <div className="flex items-center gap-1 text-sm text-gray-400 mt-2">
+                    <Calendar size={14} />
+                    <span>Completed on {new Date(course.completedAt).toLocaleDateString()}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1 mt-2">
+                  <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <div className="bg-green-500 h-1.5 rounded-full" style={{ width: "100%" }}></div>
+                  </div>
+                  <span className="text-xs text-green-400 ml-2 whitespace-nowrap">100%</span>
+                </div>
               </div>
-              <CheckCircle className="text-green-600" size={24} />
+              <CheckCircle className="text-green-500 flex-shrink-0 mt-1" size={24} />
             </div>
           </Card>
         ))}
