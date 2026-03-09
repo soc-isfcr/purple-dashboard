@@ -573,7 +573,7 @@
 
 // // import { useState, useEffect } from "react"
 // // import { motion } from "framer-motion"
-// // import { BookOpen, Clock, Users, Star, Search, Play, Video } from "lucide-react"
+// // import { BookOpen, Search, Filter, Clock, Users, Star, Play, Video } from "lucide-react"
 // // import { courseApi } from "../../api/courseApi"
 // // import { enrollmentApi } from "../../api/enrollmentApi"
 // // import { toast } from "react-toastify"
@@ -875,8 +875,8 @@
 
 
 
-// //client/src/pages/dashboard/CourseList.js  
-// // client/src/pages/dashboard/CourseList.js  
+// //client/src/pages/dashboard/CourseList.js
+// // client/src/pages/dashboard/CourseList.js
 
 // import { useEffect, useState } from "react"
 // import { Button } from "../../components/Layouts/Button"
@@ -952,7 +952,7 @@
 //               <span className="text-sm text-gray-500">Duration: {course.duration || 'N/A'}</span>
 //               <span className="text-sm font-medium text-blue-600">{course.difficulty || 'Beginner'}</span>
 //             </div>
-//             <Button 
+//             <Button
 //               className="w-full"
 //               onClick={() => handleEnroll(course._id)}
 //             >
@@ -1036,7 +1036,7 @@ export default function CourseList() {
 
   useEffect(() => {
     fetchCourses();
-  }, [selectedCategory, selectedDifficulty, searchTerm]);
+  }, [fetchCourses]);
 
   const fetchCourses = async () => {
     try {
@@ -1074,6 +1074,21 @@ export default function CourseList() {
     }
   };
 
+  // Filter courses based on search, category, difficulty, and enrollment status
+  const filteredCourses = courses.filter((course) => {
+    const matchesSearch =
+      course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      course.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory = selectedCategory === "All Categories" || course.category === selectedCategory;
+    const matchesDifficulty = selectedDifficulty === "All Levels" || course.difficulty === selectedDifficulty;
+
+    // Only show courses the user is NOT already enrolled in
+    const notEnrolled = !course.isEnrolled;
+
+    return matchesSearch && matchesCategory && matchesDifficulty && notEnrolled;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1108,7 +1123,7 @@ export default function CourseList() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-slate-500 text-sm font-medium">Total Courses</p>
-                <p className="text-3xl font-bold text-indigo-600 mt-1">{courses.length}</p>
+                <p className="text-3xl font-bold text-indigo-600 mt-1">{filteredCourses.length}</p>
               </div>
               <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
                 <BookOpen className="w-6 h-6 text-indigo-600" />
@@ -1121,7 +1136,7 @@ export default function CourseList() {
               <div>
                 <p className="text-slate-500 text-sm font-medium">Categories</p>
                 <p className="text-3xl font-bold text-purple-600 mt-1">
-                  {new Set(courses.map(c => c.category)).size}
+                  {new Set(filteredCourses.map(c => c.category)).size}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -1135,8 +1150,8 @@ export default function CourseList() {
               <div>
                 <p className="text-slate-500 text-sm font-medium">Avg Duration</p>
                 <p className="text-3xl font-bold text-blue-600 mt-1">
-                  {courses.length > 0
-                    ? (courses.reduce((sum, c) => sum + c.duration, 0) / courses.length).toFixed(1)
+                  {filteredCourses.length > 0
+                    ? (filteredCourses.reduce((sum, c) => sum + c.duration, 0) / filteredCourses.length).toFixed(1)
                     : 0}h
                 </p>
               </div>
@@ -1151,7 +1166,7 @@ export default function CourseList() {
               <div>
                 <p className="text-slate-500 text-sm font-medium">Popular</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">
-                  {courses.filter(c => (c.enrollmentCount || 0) > 10).length}
+                  {filteredCourses.filter(c => (c.enrollmentCount || 0) > 10).length}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -1224,11 +1239,11 @@ export default function CourseList() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-900">Available Courses</h2>
           <span className="px-4 py-2 bg-white text-slate-700 font-semibold rounded-xl text-sm shadow-md">
-            {courses.length} {courses.length === 1 ? "Course" : "Courses"}
+            {filteredCourses.length} {filteredCourses.length === 1 ? "Course" : "Courses"}
           </span>
         </div>
 
-        {courses.length === 0 ? (
+        {filteredCourses.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <BookOpen className="w-8 h-8 text-slate-400" />
@@ -1238,7 +1253,7 @@ export default function CourseList() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course, index) => (
+            {filteredCourses.map((course, index) => (
               <motion.div
                 key={course._id}
                 initial={{ opacity: 0, y: 20 }}

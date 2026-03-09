@@ -24,4 +24,5 @@ export const quizApi = {
   deleteQuiz: (quizId) => axios.delete(`/quizzes/${quizId}`),
 
   allowResubmit: (submissionId) => axios.patch(`/quizzes/${submissionId}/allow-resubmit`),
+  getUserResults: () => axios.get("/quizzes/user/results"),
 }

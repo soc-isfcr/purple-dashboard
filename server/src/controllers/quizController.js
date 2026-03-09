@@ -3209,3 +3209,20 @@ export const allowResubmit = async (req, res, next) => {
     next(error)
   }
 }
+
+export const getUserQuizResults = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const submissions = await QuizSubmission.find({ userId, submitted: true })
+      .populate("quiz", "title")
+      .populate("courseId", "title courseId")
+      .sort({ submittedAt: -1 });
+
+    res.json({
+      success: true,
+      data: submissions
+    });
+  } catch (error) {
+    next(error);
+  }
+};

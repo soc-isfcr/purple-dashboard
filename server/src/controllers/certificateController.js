@@ -56,7 +56,13 @@ const calculateGrade = async (userId, courseId) => {
 // Generate certificate
 export const generateCertificate = async (userId, courseId) => {
   try {
-    const existingCert = await Certificate.findOne({ userId, courseId });
+    // Modified existingCert query to handle potential 'user'/'course' fields
+    const existingCert = await Certificate.findOne({
+      $and: [
+        { $or: [{ userId: userId }, { user: userId }] },
+        { $or: [{ courseId: courseId }, { course: courseId }] }
+      ]
+    });
     if (existingCert) return existingCert;
 
     const [user, course, grade] = await Promise.all([
@@ -157,6 +163,15 @@ export const downloadCertificate = async (req, res, next) => {
       // Top Right: logo.png
       if (fs.existsSync(mainLogoPath)) {
         doc.image(mainLogoPath, pageWidth - 140, 40, { width: 80 });
+      }
+
+      // ================= WATERMARK (CENTER) =================
+      const watermarkPath = path.join(publicPath, "logoPesu.png");
+      if (fs.existsSync(watermarkPath)) {
+        doc.save();
+        doc.opacity(0.1); // Subtle watermark
+        doc.image(watermarkPath, (pageWidth / 2) - 150, (pageHeight / 2) - 150, { width: 300 });
+        doc.restore();
       }
     } catch (error) {
       console.error("Error loading logos:", error);

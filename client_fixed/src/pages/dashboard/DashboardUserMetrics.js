@@ -984,7 +984,10 @@ export default function DashboardUserMetrics() {
     const fetchMetrics = async () => {
       try {
         const response = await axios.get("/dashboard/user")
-        const data = response.data
+        // Backend uses sendResponse which nests data in .data
+        const data = response.data.data || response.data
+
+        console.log("[Dashboard] Received metrics data:", data)
 
         // Transform dashboard data to metrics format
         setMetrics({

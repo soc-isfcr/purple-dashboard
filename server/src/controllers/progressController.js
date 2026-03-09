@@ -91,12 +91,20 @@ export const updateCourseProgress = async (userId, courseId) => {
     }
 
     // Try to update enrollment
+    // Robust query for different schema variations
     const updatedEnrollment = await Enrollment.findOneAndUpdate(
-      { userId, courseId },
+      {
+        $or: [
+          { userId, courseId },
+          { user: userId, course: courseId },
+          { userId, course: courseId },
+          { user: userId, courseId }
+        ]
+      },
       enrollmentUpdate,
       { new: true }
     ).catch(err => {
-      console.warn(`[Progress] Could not update enrollment:`, err.message);
+      console.warn(`[Progress] Critical error updating enrollment for User: ${userId}, Course: ${courseId}:`, err.message);
       return null;
     });
 

@@ -324,7 +324,7 @@ export const createNotification = async (options) => {
     const { userId, type, title, message, courseId, itemId } = options
 
     const notification = new Notification({
-      user: userId,
+      userId: userId,
       type,
       title,
       message,

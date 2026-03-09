@@ -1372,17 +1372,28 @@ export const getCompletedEnrollments = async (req, res, next) => {
         // If a user finished everything but the status didn't update, this fixes it
         const p = await updateCourseProgress(userId, courseData._id);
 
-        // Only return if it's truly completed (overallProgress 100 or status completed)
-        if (e.status === "completed" || e.status === "finished" || (p && p.overallProgress >= 100)) {
+        // ONLY return if strictly completed:
+        // 1. Progress must be 100% (calculated)
+        // 2. A certificate MUST exist for this user and course
+        const { default: Certificate } = await import("../models/Certificate.js");
+        const certificate = await Certificate.findOne({
+          $and: [
+            { $or: [{ userId }, { user: userId }] },
+            { $or: [{ courseId: courseData._id }, { course: courseData._id }] }
+          ]
+        });
+
+        if (p && p.overallProgress >= 100 && certificate) {
           return {
             ...courseData.toObject(),
-            completedAt: e.completedAt || e.updatedAt,
-            progress: p ? p.overallProgress : 100
+            completedAt: certificate.issuedDate || e.completedAt || e.updatedAt,
+            progress: 100,
+            certificateId: certificate._id
           };
         }
 
-        console.log(`[Enrollment] Course ${courseData.title} is not actually completed (${p?.overallProgress || 0}%)`);
-        return null; // Filtered out later
+        console.log(`[Enrollment] Course ${courseData.title} is not fully completed. Progress: ${p?.overallProgress || 0}%, Certificate: ${!!certificate}`);
+        return null; // Filtered out
       } catch (err) {
         console.error(`[Enrollment] Error syncing progress for completed course ${courseData._id}:`, err);
         return {

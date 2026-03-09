@@ -4,6 +4,7 @@ import { protect } from "../middleware/authMiddleware.js"
 
 const router = Router()
 
+router.get("/", protect, getUserCertificates)
 router.get("/user", protect, getUserCertificates)
 router.get("/count", protect, getCertificateCount)
 router.get("/:id/download", protect, downloadCertificate)

@@ -503,6 +503,7 @@ router.patch("/:submissionId/allow-resubmit", requireAuth, rbac(["admin"]), quiz
 
 // User routes
 router.get("/visible", requireAuth, quizController.getUserQuizzes)
+router.get("/user/results", requireAuth, quizController.getUserQuizResults)
 router.get("/course/:courseId", requireAuth, quizController.getUserQuizzes)
 router.get("/:quizId", requireAuth, quizController.getQuiz)
 router.post("/:submissionId/answer", requireAuth, quizController.saveQuizAnswer)

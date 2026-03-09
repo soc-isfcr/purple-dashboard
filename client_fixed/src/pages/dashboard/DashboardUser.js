@@ -933,7 +933,7 @@ export default function DashboardUser() {
       label: "Learning",
       children: [
         { key: "courses", label: "Courses", icon: <BookOpen size={18} /> },
-        // { key: "completed", label: "Completed", icon: <CheckCircle size={18} /> },
+        { key: "completed", label: "Completed", icon: <CheckCircle size={18} /> },
         { key: "ongoing", label: "Ongoing", icon: <Clock size={18} /> },
         { key: "certificates", label: "Certificates", icon: <Award size={18} /> },
         { key: "assignments", label: "Assignments", icon: <ListChecks size={18} /> },

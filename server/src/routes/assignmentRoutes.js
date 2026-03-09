@@ -457,8 +457,8 @@ router.put("/:assignmentId", requireAuth, rbac(["admin"]), assignmentController.
 // User routes - IMPORTANT: specific routes before parameterized ones
 router.get("/user/all", requireAuth, assignmentController.getAllUserAssignments)
 router.get("/course/:courseId", requireAuth, assignmentController.getUserAssignments)
-router.get("/:assignmentId", requireAuth, assignmentController.getAssignment)
-router.post("/:assignmentId/submit", requireAuth, upload.single("file"), assignmentController.submitAssignment)
-router.post("/:submissionId/draft", requireAuth, assignmentController.saveAssignmentDraft)
+router.get("/:id", requireAuth, assignmentController.getAssignment)
+router.post("/:id/submit", requireAuth, upload.single("file"), assignmentController.submitAssignment)
+router.post("/:id/draft", requireAuth, assignmentController.saveAssignmentDraft)
 
 export default router

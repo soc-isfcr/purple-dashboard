@@ -1,29 +1,24 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { quizApi } from "../../api/quizApi"
 import { toast, ToastContainer } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
-import { Clock, CheckCircle, AlertCircle, ArrowLeft, Play, FileQuestion } from "lucide-react"
+import { Clock, CheckCircle, ArrowLeft, Play, FileQuestion } from "lucide-react"
 
 export default function UserQuizzes() {
   const { courseId } = useParams()
   const navigate = useNavigate()
   const [quizzes, setQuizzes] = useState([])
+  const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedQuiz, setSelectedQuiz] = useState(null)
   const [submission, setSubmission] = useState(null)
   const [answers, setAnswers] = useState({}) // Local state for UI feedback
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (courseId) {
-      loadQuizzes()
-    }
-  }, [courseId])
-
-  const loadQuizzes = async () => {
+  const loadQuizzes = useCallback(async () => {
     try {
       setLoading(true)
       const res = await quizApi.getUserQuizzes(courseId)
@@ -34,7 +29,28 @@ export default function UserQuizzes() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [courseId])
+
+  const loadAllResults = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await quizApi.getUserResults()
+      setResults(res.data.data || [])
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to load quiz history")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (courseId) {
+      loadQuizzes()
+    } else {
+      loadAllResults()
+    }
+  }, [courseId, loadQuizzes, loadAllResults])
 
   const startQuiz = async (quiz) => {
     try {
@@ -189,25 +205,73 @@ export default function UserQuizzes() {
       <ToastContainer position="bottom-right" theme="colored" />
 
       <div className="max-w-7xl mx-auto mb-8">
-        <button
-          onClick={() => navigate('/user')} // Navigate back to courses
-          className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft size={20} /> Back to Courses
-        </button>
+        {courseId ? (
+          <button
+            onClick={() => navigate("/user")} // Navigate back to courses
+            className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft size={20} /> Back to Courses
+          </button>
+        ) : null}
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg">
             <FileQuestion className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Course Quizzes</h1>
-            <p className="text-gray-400">Test your knowledge</p>
+            <h1 className="text-3xl font-bold text-slate-800">{courseId ? "Course Quizzes" : "Quiz History"}</h1>
+            <p className="text-slate-600 font-medium">{courseId ? "Test your knowledge" : "Your previous attempts"}</p>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto">
-        {quizzes.length === 0 ? (
+        {!courseId ? (
+          <div className="bg-gray-800 rounded-2xl overflow-hidden border border-gray-700 shadow-xl">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-900/50 border-b border-gray-700">
+                  <th className="p-4 font-semibold text-gray-300">Course</th>
+                  <th className="p-4 font-semibold text-gray-300">Quiz</th>
+                  <th className="p-4 font-semibold text-gray-300">Score</th>
+                  <th className="p-4 font-semibold text-gray-300">Submitted At</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700/50">
+                {results.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="p-10 text-center text-gray-500">
+                      No quiz attempts found.
+                    </td>
+                  </tr>
+                ) : (
+                  results.map((res) => (
+                    <tr key={res._id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="p-4">
+                        <span className="font-medium text-purple-400">{res.courseId?.title || "Unknown Course"}</span>
+                        <div className="text-xs text-gray-500">{res.courseId?.courseId}</div>
+                      </td>
+                      <td className="p-4 text-gray-200">{res.quiz?.title || "Untitled Quiz"}</td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-full bg-gray-700 rounded-full h-2 min-w-[60px]">
+                            <div
+                              className={`h-2 rounded-full ${res.percentage >= 70 ? "bg-green-500" : "bg-yellow-500"}`}
+                              style={{ width: `${res.percentage}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-bold">{res.percentage}%</span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-sm text-gray-400">
+                        {res.submittedAt ? new Date(res.submittedAt).toLocaleDateString() : "N/A"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : quizzes.length === 0 ? (
           <div className="bg-gray-800 rounded-2xl p-12 text-center border border-gray-700">
             <FileQuestion className="w-16 h-16 text-gray-600 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-300 mb-2">No quizzes available</h3>
@@ -216,9 +280,14 @@ export default function UserQuizzes() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {quizzes.map((quiz) => (
-              <div key={quiz._id} className="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-lg hover:border-purple-500/50 transition-all group">
+              <div
+                key={quiz._id}
+                className="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-lg hover:border-purple-500/50 transition-all group"
+              >
                 <div className="mb-4">
-                  <h3 className="text-xl font-bold mb-2 text-white group-hover:text-purple-400 transition-colors">{quiz.title}</h3>
+                  <h3 className="text-xl font-bold mb-2 text-white group-hover:text-purple-400 transition-colors">
+                    {quiz.title}
+                  </h3>
                   <p className="text-gray-400 text-sm line-clamp-2">{quiz.description}</p>
                 </div>
 

@@ -1,7 +1,7 @@
 import axios from "./axiosConfig"
 
 export const certificateApi = {
-  getUserCertificates: () => axios.get("/certificates"),
+  getUserCertificates: () => axios.get("/certificates/user"),
 
   getCertificate: (certificateId) => axios.get(`/certificates/${certificateId}`),
 

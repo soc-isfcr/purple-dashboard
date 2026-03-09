@@ -45,8 +45,15 @@ export const userDashboard = async (req, res, next) => {
       }
 
       // Calculate internal enrollment flag
-      // -1: Not enrolled (handled by absence of doc), 0: Ongoing, 1: Completed
-      const enrollmentType = (e.status === "completed" || currentProgress >= 100) ? 1 : 0;
+      // -1: Not enrolled, 0: Ongoing, 1: Completed (Prog 100 + Cert)
+      const hasCertificate = await Certificate.exists({
+        $and: [
+          { $or: [{ userId }, { user: userId }] },
+          { $or: [{ courseId: actualCourseId }, { course: actualCourseId }] }
+        ]
+      });
+
+      const enrollmentType = (currentProgress >= 100 && hasCertificate) ? 1 : 0;
 
       const courseData = e.courseId || {};
       const item = {
