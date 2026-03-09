@@ -1,5 +1,4 @@
 import Enrollment from "../models/Enrollment.js";
-import Progress from "../models/Progress.js";
 import Certificate from "../models/Certificate.js";
 
 export const userDashboard = async (req, res, next) => {
@@ -14,13 +13,13 @@ export const userDashboard = async (req, res, next) => {
     // Fetch enrollments (ongoing/active and completed)
     const [enrollments, certs] = await Promise.all([
       Enrollment.find({
-        $or: [{ userId }, { user: userId }],
+        userId,
         status: { $in: ["active", "ongoing", "completed"] }
-      }).populate("courseId").populate("course").lean(),
+      }).populate("courseId").lean(),
 
       Certificate.find({
-        $or: [{ userId }, { user: userId }]
-      }).populate("courseId").populate("course").lean(),
+        userId
+      }).populate("courseId").lean(),
     ]);
 
     // Import progress updater
@@ -31,46 +30,59 @@ export const userDashboard = async (req, res, next) => {
     const completed = [];
 
     for (const e of enrollments) {
-      const actualCourseId = e.courseId?._id || e.course?._id || e.courseId || e.course;
+      const actualCourseId = e.courseId?._id || e.courseId;
       if (!actualCourseId) continue;
 
       // Sync progress for ongoing courses to ensure accuracy
       let currentProgress = e.progress || 0;
       if (e.status !== "completed") {
-        const p = await updateCourseProgress(userId, actualCourseId);
-        currentProgress = p ? p.overallProgress : currentProgress;
+        try {
+          const p = await updateCourseProgress(userId, actualCourseId);
+          currentProgress = p ? p.overallProgress : currentProgress;
+        } catch (err) {
+          console.warn(`[Dashboard] Failed to update progress for course ${actualCourseId}:`, err.message);
+        }
       }
 
-      const courseData = e.courseId || e.course || {};
+      // Calculate internal enrollment flag
+      // -1: Not enrolled (handled by absence of doc), 0: Ongoing, 1: Completed
+      const enrollmentType = (e.status === "completed" || currentProgress >= 100) ? 1 : 0;
+
+      const courseData = e.courseId || {};
       const item = {
         id: e._id,
         courseId: actualCourseId,
         course: courseData.title || "Untitled",
         percentage: currentProgress,
         status: e.status,
-        enrolledAt: e.enrolledAt
+        enrolledAt: e.enrolledAt,
+        enrollmentType: enrollmentType // Internal flag for robust state management
       };
 
-      if (e.status === "completed") {
-        item.completedAt = e.completedAt;
+      if (e.status === "completed" || currentProgress >= 100) {
+        item.completedAt = e.completedAt || new Date();
+        item.status = "completed";
         completed.push(item);
       } else {
         ongoing.push(item);
       }
     }
 
-    console.log(`[Dashboard] Dashboard stats for User: ${userId}: Ongoing: ${ongoing.length}, Completed: ${completed.length}, Certs: ${certs.length}`);
+    console.log(`[Dashboard] Stats for User ${userId} -> Enrolled: ${enrollments.length}, Ongoing: ${ongoing.length}, Completed: ${completed.length}, Certs: ${certs.length}`);
 
-    res.json({
+    const dashboardData = {
       ongoing,
       completed,
       certificates: certs.map(c => ({
         id: c._id,
         certId: c.certificateId || c.certId,
-        course: (c.courseId?.title || c.course?.title || "Untitled"),
+        course: (c.courseId?.title || "Untitled"),
         issuedAt: c.issuedDate || c.issuedAt || null,
       })),
-    });
+    };
+
+    const { sendResponse } = await import("../utils/response.js");
+    return sendResponse(res, 200, "User dashboard data fetched successfully", dashboardData);
   } catch (error) {
     console.error("[Dashboard] Error in userDashboard:", error);
     next(error);

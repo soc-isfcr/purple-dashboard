@@ -2698,7 +2698,10 @@
 import Assignment from "../models/Assignment.js"
 import AssignmentSubmission from "../models/AssignmentSubmission.js"
 import Enrollment from "../models/Enrollment.js"
+import Course from "../models/Course.js"
+import User from "../models/User.js"
 import { createHttpError } from "../utils/errors.js"
+import { successResponse } from "../utils/response.js"
 import * as notificationController from "./notificationController.js"
 
 // Admin: Create assignment
@@ -2711,7 +2714,7 @@ export const createAssignment = async (req, res, next) => {
     }
 
     const assignment = new Assignment({
-      courseId: course,
+      courseId: courseId,
       title,
       description,
       instructions, // make sure schema has this or description
@@ -2734,14 +2737,14 @@ export const createAssignment = async (req, res, next) => {
       .populate("createdBy", "name email");
 
     // Notify enrolled users
-    const enrollments = await Enrollment.find({ courseId: course })
+    const enrollments = await Enrollment.find({ courseId: courseId })
     for (const enrollment of enrollments) {
       await notificationController.createNotification({
-        userId: enrollment.user,
+        userId: enrollment.userId || enrollment.user,
         type: "assignment",
         title: `New Assignment: ${title}`,
         message: `A new assignment has been added to your course`,
-        courseId: course,
+        courseId: courseId,
       })
     }
 
@@ -2802,18 +2805,16 @@ export const updateAssignment = async (req, res, next) => {
         .populate("userId", "_id")
         .lean();
 
-      const studentIds = enrolledStudents.map((e) => e.userId._id);
-
-      await notificationService.createNotification({
-        users: studentIds,
-        type: "assignment_created",
-        title: "New Assignment",
-        message: `New assignment "${title || assignment.title}" has been posted`,
-        data: {
-          assignmentId: assignment._id,
+      for (const student of enrolledStudents) {
+        await notificationController.createNotification({
+          userId: student.userId?._id || student.userId,
+          type: "assignment",
+          title: "New Assignment",
+          message: `New assignment "${title || assignment.title}" has been posted`,
           courseId: assignment.courseId,
-        },
-      });
+          itemId: assignment._id
+        });
+      }
     }
 
     res.json(successResponse(updatedAssignment, "Assignment updated successfully"));
@@ -2839,17 +2840,15 @@ export const deleteAssignment = async (req, res, next) => {
         .populate("userId", "_id")
         .lean();
 
-      const studentIds = enrolledStudents.map((e) => e.userId._id);
-
-      await notificationService.createNotification({
-        users: studentIds,
-        type: "assignment_deleted",
-        title: "Assignment Deleted",
-        message: `Assignment "${assignment.title}" has been removed`,
-        data: {
+      for (const student of enrolledStudents) {
+        await notificationController.createNotification({
+          userId: student.userId?._id || student.userId,
+          type: "assignment",
+          title: "Assignment Deleted",
+          message: `Assignment "${assignment.title}" has been removed`,
           courseId: assignment.courseId._id,
-        },
-      });
+        });
+      }
     }
 
     // Delete all submissions for this assignment
@@ -2914,15 +2913,13 @@ export const gradeAssignment = async (req, res, next) => {
       .populate("assignment", "title");
 
     // Notify student about grading
-    await notificationService.createNotification({
-      users: [submission.userId],
-      type: "assignment_graded",
+    await notificationController.createNotification({
+      userId: submission.userId,
+      type: "assignment",
       title: "Assignment Graded",
       message: `Your assignment "${populatedSubmission.assignment.title}" has been graded: ${grade}`,
-      data: {
-        assignmentId: submission.assignment,
-        grade,
-      },
+      courseId: submission.courseId,
+      itemId: submission.assignment,
     });
 
     res.json(successResponse(populatedSubmission, "Submission graded successfully"));
@@ -3006,8 +3003,10 @@ export const getUserAssignments = async (req, res, next) => {
 // Get single assignment
 export const getAssignment = async (req, res, next) => {
   try {
-    const { assignmentId } = req.params
-    const userId = req.user._id
+    const { id: assignmentId } = req.params; // Route uses :id
+    const userId = req.user?._id || req.user?.id;
+
+    console.log(`[Assignment] Fetching assignment: ${assignmentId} for User: ${userId}`);
 
     // Validate assignmentId is a valid ObjectId
     if (!/^[0-9a-fA-F]{24}$/.test(assignmentId)) {
@@ -3086,18 +3085,54 @@ export const getAdminAssignments = async (req, res, next) => {
 // Save assignment draft
 export const saveAssignmentDraft = async (req, res, next) => {
   try {
-    const { submissionId } = req.params;
-    const { text, file, fileSize } = req.body;
-    // Logic to save draft...
-    // If submissionId exists, update. If not, create? 
-    // Route passes submissionId.
+    const { id: submissionId } = req.params; // Route uses :id
+    const userId = req.user?._id || req.user?.id;
+    const { submissionText } = req.body;
 
-    // This seems to imply submission already exists or frontend gen ID?
-    // Usually draft creation might happen via submit with status=draft.
+    console.log(`[Assignment] Saving draft for: ${submissionId} by User: ${userId}`);
 
-    // For now sticking to basic logic.
-    res.json(successResponse(null, "Draft saved"));
+    // We allow submissionId to be either assignmentId or submissionId
+    // First try to find by submissionId
+    let submission = await AssignmentSubmission.findById(submissionId);
+
+    // If not found, it might be an assignmentId
+    if (!submission) {
+      submission = await AssignmentSubmission.findOne({
+        assignment: submissionId,
+        userId: userId
+      });
+    }
+
+    // If still not found, we need an assignment to create one
+    if (!submission) {
+      const assignment = await Assignment.findById(submissionId);
+      if (!assignment) {
+        return next(createHttpError(404, "Assignment or Submission not found"));
+      }
+
+      submission = new AssignmentSubmission({
+        assignment: submissionId,
+        userId: userId,
+        courseId: assignment.courseId,
+        submissionText: submissionText || "",
+        status: "draft",
+        submitted: false
+      });
+    } else {
+      submission.submissionText = submissionText || "";
+      submission.status = "draft";
+      submission.submitted = false;
+    }
+
+    await submission.save();
+
+    res.json({
+      success: true,
+      message: "Draft saved successfully",
+      data: submission
+    });
   } catch (error) {
+    console.error("[Assignment] Draft save error:", error);
     next(error);
   }
 }
@@ -3105,21 +3140,41 @@ export const saveAssignmentDraft = async (req, res, next) => {
 // Submit assignment
 export const submitAssignment = async (req, res, next) => {
   try {
-    const { assignmentId } = req.params
-    const userId = req.user._id
-    const { submissionText } = req.body
+    const { id: assignmentId } = req.params; // Route uses :id for assignment/submission ID
+    const userId = req.user?._id || req.user?.id;
+    const { submissionText } = req.body;
 
-    // Find the assignment
-    const assignment = await Assignment.findById(assignmentId)
-    if (!assignment) {
-      return next(createHttpError(404, "Assignment not found"))
+    console.log(`[Assignment] Submission attempt for assignment/submission ID: ${assignmentId} by User: ${userId}`);
+
+    if (!assignmentId) {
+      return next(createHttpError(400, "Assignment ID is required"));
     }
 
-    // Check if user already submitted
-    let submission = await AssignmentSubmission.findOne({
-      assignment: assignmentId,
-      userId: userId,
-    })
+    // Try to find assignment first
+    let assignment = await Assignment.findById(assignmentId);
+    let submission = null;
+
+    if (!assignment) {
+      console.log(`[Assignment] Assignment ${assignmentId} not found, checking if it is a submission ID...`);
+      // If no assignment found, try if it's a submissionId
+      submission = await AssignmentSubmission.findById(assignmentId).populate("assignment");
+      if (submission) {
+        assignment = submission.assignment;
+        console.log(`[Assignment] Found submission ${assignmentId} for assignment ${assignment?._id}`);
+      }
+    } else {
+      // If assignment found, find the user's submission for it
+      submission = await AssignmentSubmission.findOne({
+        assignment: assignmentId,
+        userId: userId,
+      });
+      console.log(`[Assignment] Found assignment ${assignmentId}, existing submission: ${submission ? 'yes' : 'no'}`);
+    }
+
+    if (!assignment) {
+      console.error(`[Assignment] Could not find assignment or submission with ID: ${assignmentId}`);
+      return next(createHttpError(404, "Assignment not found"));
+    }
 
     if (submission && submission.submitted) {
       return next(createHttpError(400, "Assignment already submitted"))
@@ -3135,12 +3190,15 @@ export const submitAssignment = async (req, res, next) => {
         data: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`,
         size: req.file.size
       }
+    } else if (submission && submission.file) {
+      // Keep existing file if no new one uploaded
+      fileData = submission.file
     }
 
     // Create or update submission
     if (!submission) {
       submission = new AssignmentSubmission({
-        assignment: assignmentId,
+        assignment: assignment._id,
         userId: userId,
         courseId: assignment.courseId,
         submissionText: submissionText || "",
@@ -3159,9 +3217,16 @@ export const submitAssignment = async (req, res, next) => {
       submission.isLate = new Date() > assignment.dueDate
     }
 
+    await submission.save()
+
     // Update progress
-    const { updateCourseProgress } = await import("./progressController.js")
-    await updateCourseProgress(userId, assignment.courseId)
+    try {
+      const { updateCourseProgress } = await import("./progressController.js")
+      await updateCourseProgress(userId, assignment.courseId)
+    } catch (progressError) {
+      console.error("[Assignment] Progress update error:", progressError)
+      // Don't fail the whole request if progress update fails
+    }
 
     res.json({
       success: true,

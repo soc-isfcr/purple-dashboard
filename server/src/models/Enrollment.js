@@ -111,35 +111,6 @@
 // // const enrollmentSchema = new mongoose.Schema(
 // //   {
 // //     userId: {
-// //       type: mongoose.Schema.Types.ObjectId,
-// //       ref: "User",
-// //       required: true,
-// //     },
-// //     courseId: {
-// //       type: mongoose.Schema.Types.ObjectId,
-// //       ref: "Course",
-// //       required: true,
-// //     },
-// //     status: {
-// //       type: String,
-// //       enum: ["ongoing", "completed", "dropped"],
-// //       default: "ongoing",
-// //     },
-// //     enrolledAt: {
-// //       type: Date,
-// //       default: Date.now,
-// //     },
-// //     completedAt: Date,
-// //     progress: {
-// //       type: Number,
-// //       default: 0,
-// //     },
-// //     materialsViewed: [
-// //       {
-// //         type: mongoose.Schema.Types.ObjectId,
-// //         ref: "Material",
-// //       },
-// //     ],
 // //     quizzesAttempted: [
 // //       {
 // //         quizId: mongoose.Schema.Types.ObjectId,
@@ -249,6 +220,28 @@ const enrollmentSchema = new mongoose.Schema({
 // Compound index to ensure a user can only enroll once per course
 enrollmentSchema.index({ userId: 1, courseId: 1 }, { unique: true })
 enrollmentSchema.index({ status: 1 })
+
+/**
+ * Robust Enrollment Status Management (Internal Flags)
+ * These flags are used to simplify backend-frontend communication and ensure logic consistency.
+ * 
+ * -1 : Not Enrolled / Dropped
+ *  0 : Enrolled & Ongoing (Progress < 100%)
+ *  1 : Completed (Progress >= 100% OR status: 'completed')
+ * 
+ * Logic Guarantees:
+ * - If status is 'completed', enrollmentType must be 1.
+ * - If enrollmentType is 1, status should eventually be updated to 'completed'.
+ */
+enrollmentSchema.virtual('enrollmentType').get(function () {
+  if (this.status === 'completed' || this.progress >= 100) return 1;
+  if (['active', 'ongoing'].includes(this.status)) return 0;
+  return -1;
+});
+
+// Ensure virtuals are included in JSON
+enrollmentSchema.set('toJSON', { virtuals: true });
+enrollmentSchema.set('toObject', { virtuals: true });
 
 const Enrollment = mongoose.model('Enrollment', enrollmentSchema)
 export default Enrollment

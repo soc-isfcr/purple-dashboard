@@ -1,3 +1,5 @@
+import path from "path";
+import fs from "fs";
 import Certificate from "../models/Certificate.js";
 import Course from "../models/Course.js";
 import User from "../models/User.js";
@@ -85,6 +87,7 @@ export const generateCertificate = async (userId, courseId) => {
     });
 
     await certificate.save();
+    console.log(`[Certificate] Generated ${certificateId} for User: ${userId}, Course: ${courseId}`);
     return certificate;
   } catch (error) {
     console.error("Error generating certificate:", error);
@@ -120,7 +123,7 @@ export const downloadCertificate = async (req, res, next) => {
     const doc = new PDFDocument({
       layout: "landscape",
       size: "A4",
-      margins: { top: 100, bottom: 100, left: 100, right: 100 },
+      margins: { top: 40, bottom: 40, left: 60, right: 60 },
     });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -134,118 +137,130 @@ export const downloadCertificate = async (req, res, next) => {
     const pageHeight = doc.page.height;
 
     // Logos paths
-    const logoPath =
-      "/home/soc-pc2/Downloads/purple-dashboard-main/client_fixed/public/soc_logo.png";
-    const isfcrLogoPath =
-      "/home/soc-pc2/Downloads/purple-dashboard-main/client_fixed/public/c_isfcr_logo-removebg-preview.png";
-    const pesuLogoPath =
-      "/home/soc-pc2/Downloads/purple-dashboard-main/client_fixed/public/logo.png"; // top-right small logo
-    const watermarkPath =
-      "/home/soc-pc2/Downloads/purple-dashboard-main/client_fixed/public/logo.png"; // watermark
+    const publicPath = path.resolve(process.cwd(), "..", "client_fixed", "public");
+    const socLogoPath = path.join(publicPath, "soc_logo.png"); // Top middle
+    const isfcrLogoPath = path.join(publicPath, "c_isfcr_logo.jpeg"); // Top left
+    const mainLogoPath = path.join(publicPath, "logo.png"); // Top right
 
-    // ================= TOP-LEFT & TOP-RIGHT LOGOS =================
+    // ================= LOGOS AT TOP =================
     try {
-      doc.image(logoPath, 30, 30, { width: 100 });
-      const topRightWidth = 100;
-      const topRightSpacing = 20;
-      const topRightX = pageWidth - 30 - topRightWidth;
-      doc.image(isfcrLogoPath, topRightX, 30, { width: topRightWidth });
-      doc.image(
-        pesuLogoPath,
-        topRightX - topRightWidth - topRightSpacing,
-        30,
-        { width: topRightWidth }
-      );
+      // Top Left: c_isfcr_logo.jpeg
+      if (fs.existsSync(isfcrLogoPath)) {
+        doc.image(isfcrLogoPath, 60, 40, { width: 80 });
+      }
+
+      // Top Middle: soc_logo.png
+      if (fs.existsSync(socLogoPath)) {
+        doc.image(socLogoPath, (pageWidth / 2) - 40, 40, { width: 80 });
+      }
+
+      // Top Right: logo.png
+      if (fs.existsSync(mainLogoPath)) {
+        doc.image(mainLogoPath, pageWidth - 140, 40, { width: 80 });
+      }
     } catch (error) {
       console.error("Error loading logos:", error);
     }
 
-    // ================= WATERMARK =================
-    try {
-      doc.save();
-      doc.opacity(0.15);
-      const wmWidth = pageWidth * 0.55;
-      const wmX = (pageWidth - wmWidth) / 2;
-      const wmY = (pageHeight - wmWidth) / 2;
-      doc.image(watermarkPath, wmX, wmY, { width: wmWidth });
-      doc.restore();
-    } catch (error) {
-      console.error("Error loading watermark:", error);
-    }
+    // ================= BORDER =================
+    doc.rect(20, 20, pageWidth - 40, pageHeight - 40).lineWidth(3).stroke("#4A148C");
+    doc.rect(30, 30, pageWidth - 60, pageHeight - 60).lineWidth(1).stroke("#7B1FA2");
 
     // ================= CERTIFICATE CONTENT =================
     doc
-      .fontSize(36)
+      .fontSize(42)
       .font("Helvetica-Bold")
-      .text("CERTIFICATE OF COMPLETION", 0, 150, {
+      .fillColor("#4A148C")
+      .text("CERTIFICATE", 0, 160, {
         align: "center",
         width: pageWidth,
       });
-    doc.moveTo(150, 220).lineTo(pageWidth - 150, 220).stroke();
+
+    doc
+      .fontSize(20)
+      .font("Helvetica")
+      .fillColor("#333")
+      .text("OF COMPLETION", 0, 210, {
+        align: "center",
+        width: pageWidth,
+      });
+
+    doc.moveDown(1.5);
 
     doc
       .fontSize(18)
       .font("Helvetica")
       .text("This is to certify that", 0, 280, { align: "center", width: pageWidth });
+
+    doc.moveDown(0.5);
+
     doc
-      .fontSize(28)
+      .fontSize(32)
       .font("Helvetica-Bold")
-      .text(cert.userId.name || "Unknown User", 0, 330, {
+      .fillColor("#1A237E")
+      .text(cert.userId?.name || "Student Name", 0, 320, {
         align: "center",
         width: pageWidth,
       });
+
+    doc.moveDown(0.5);
+
     doc
-      .fontSize(18)
+      .fontSize(16)
       .font("Helvetica")
-      .text("has completed the course", 0, 380, { align: "center", width: pageWidth });
+      .fillColor("#333")
+      .text("has successfully completed the course", 0, 380, { align: "center", width: pageWidth });
+
     doc
-      .fontSize(24)
+      .fontSize(22)
       .font("Helvetica-Bold")
-      .text(cert.courseId.title || "Unknown Course", 0, 420, {
+      .fillColor("#4A148C")
+      .text(cert.courseId?.title || "Course Title", 0, 410, {
         align: "center",
         width: pageWidth,
       });
 
-    if (cert.grade && cert.grade !== "NA") {
-      doc
-        .fontSize(18)
-        .font("Helvetica")
-        .text(`and attained grade ${cert.grade}`, 0, 450, {
-          align: "center",
-          width: pageWidth,
-        });
-    }
+    doc.moveDown(0.5);
 
-// ================= ADMIN SIGNATURE =================
-const adminName = cert.courseId.instructor || "Unknown Admin";
-const adminDesignation = "Course Instructor";
-doc
-  .fontSize(12)
-  .font("Helvetica-Bold")
-  .text("Course Instructor", pageWidth - 250, 470, { align: "right" });
+    const gradeText = cert.grade && cert.grade !== "NA" ? `with Grade ${cert.grade}` : "with distinction";
+    doc
+      .fontSize(16)
+      .font("Helvetica-Oblique")
+      .fillColor("#333")
+      .text(gradeText, 0, 450, {
+        align: "center",
+        width: pageWidth,
+      });
 
-// Certificate ID
-doc
-  .fontSize(12)
-  .font("Helvetica")
-  .text(`Certificate ID: ${cert.certificateId}`, 50, 460, { align: "left" });
+    // ================= SIGNATURES =================
+    const sigY = pageHeight - 120;
 
-// Issued Date
-doc
-  .fontSize(12)
-  .text(
-    `Issued on: ${new Date(cert.issuedDate).toLocaleDateString("en-US", {
+    // Bottom Left Sign
+    doc.moveTo(100, sigY).lineTo(250, sigY).lineWidth(1).stroke("#333");
+    doc.fontSize(12).font("Helvetica-Bold").text("Authorized Signatory", 100, sigY + 10, { width: 150, align: "center" });
+
+    // Bottom Right Sign
+    doc.moveTo(pageWidth - 250, sigY).lineTo(pageWidth - 100, sigY).lineWidth(1).stroke("#333");
+    doc.fontSize(12).font("Helvetica-Bold").text("Course Coordinator", pageWidth - 250, sigY + 10, { width: 150, align: "center" });
+
+    // ================= FOOTER DETAILS =================
+    // Certificate ID & Date - Moved slightly up to prevent spillover to page 2 (absolute Y: pageHeight - 70)
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#666")
+      .text(`Certificate ID: ${cert.certificateId}`, 60, pageHeight - 70);
+
+    const issuedDate = new Date(cert.issuedDate).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
-    })}`,
-    0, 480,
-    { align: "center", width: pageWidth }
-  );
+    });
+    doc.text(`Date of Issue: ${issuedDate}`, pageWidth - 220, pageHeight - 70, { width: 160, align: "right" });
 
-    // ================= END FOOTER & ADMIN =================
     doc.end();
   } catch (err) {
+    console.error("PDF Generation Error:", err);
     next(err);
   }
 };

@@ -933,7 +933,7 @@ export default function DashboardUser() {
       label: "Learning",
       children: [
         { key: "courses", label: "Courses", icon: <BookOpen size={18} /> },
-        { key: "completed", label: "Completed", icon: <CheckCircle size={18} /> },
+        // { key: "completed", label: "Completed", icon: <CheckCircle size={18} /> },
         { key: "ongoing", label: "Ongoing", icon: <Clock size={18} /> },
         { key: "certificates", label: "Certificates", icon: <Award size={18} /> },
         { key: "assignments", label: "Assignments", icon: <ListChecks size={18} /> },
@@ -963,16 +963,6 @@ export default function DashboardUser() {
         // Allow viewing all assignments or course-specific assignments
         return <UserAssignments courseId={selectedCourseId} />
       case "quizzes":
-        if (!selectedCourseId) {
-          return (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Quizzes</h2>
-              <p className="p-4 bg-yellow-50 rounded text-yellow-800">
-                Please go to "Ongoing" courses and select a course to view its quizzes.
-              </p>
-            </div>
-          )
-        }
         return <UserQuizzes courseId={selectedCourseId} />
       default:
         return <DashboardUserMetrics />

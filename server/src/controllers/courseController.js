@@ -639,12 +639,13 @@ export const createCourse = async (req, res, next) => {
     }
 
     logger.info("[createCourse] Creating course document...");
+    const startTime = Date.now();
     const course = await Course.create({
       ...safe,
       createdBy: req.user._id
     })
-
-    logger.info(`[createCourse] created ${course.title} (${course.courseId})`)
+    const duration = Date.now() - startTime;
+    logger.info(`[createCourse] Course created in ${duration}ms: ${course.title} (${course.courseId})`);
     sendResponse(res, 201, "Course created successfully", course)
   } catch (err) {
     logger.error('[createCourse] Unexpected error:', err)

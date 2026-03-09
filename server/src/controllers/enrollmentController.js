@@ -1284,11 +1284,16 @@ export const enrollInCourse = async (req, res, next) => {
 // GET /api/enrollments/ongoing
 export const getOngoingEnrollments = async (req, res, next) => {
   try {
-    const userId = req.user._id
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      return next(createHttpError(401, "User not authenticated"));
+    }
     console.log(`[Enrollment] Fetching ongoing courses for User: ${userId}`);
 
-    const enrollments = await Enrollment.find({ userId, status: "active" })
-      .populate("courseId")
+    const enrollments = await Enrollment.find({
+      $or: [{ userId }, { user: userId }],
+      status: { $in: ["active", "ongoing"] }
+    }).populate("courseId");
 
     console.log(`[Enrollment] Found ${enrollments.length} enrollments`);
 
@@ -1331,18 +1336,70 @@ export const getOngoingEnrollments = async (req, res, next) => {
 // GET /api/enrollments/completed
 export const getCompletedEnrollments = async (req, res, next) => {
   try {
-    const userId = req.user._id
-    const enrollments = await Enrollment.find({ userId, status: "completed" })
-      .populate("courseId")
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      console.error("[Enrollment] Unauthorized access attempt to getCompletedEnrollments");
+      return next(createHttpError(401, "User not authenticated"));
+    }
 
-    const courses = enrollments.map(e => ({
-      ...e.courseId.toObject(),
-      completedAt: e.completedAt
-    }))
+    console.log(`[Enrollment] Fetching completed courses for User: ${userId}`);
 
-    sendResponse(res, 200, "Completed courses fetched", courses)
+    // Improved query to handle different schema implementations
+    // Include active/ongoing/completed/finished to check progress in-memory
+    const enrollments = await Enrollment.find({
+      $or: [{ userId }, { user: userId }],
+      status: { $in: ["active", "ongoing", "completed", "finished"] }
+    }).populate("courseId course");
+
+    console.log(`[Enrollment] Found ${enrollments.length} potentially completed enrollments`);
+
+    const { updateCourseProgress } = await import("./progressController.js");
+
+    const courses = await Promise.all(enrollments.map(async (e) => {
+      // Handle both courseId and course fields
+      const courseData = e.courseId || e.course;
+
+      if (!courseData) {
+        console.warn(`[Enrollment] Enrollment ${e._id} has no associated course data`, {
+          courseId: e.courseId,
+          course: e.course
+        });
+        return null;
+      }
+
+      try {
+        // Background sync to ensure data consistency
+        // If a user finished everything but the status didn't update, this fixes it
+        const p = await updateCourseProgress(userId, courseData._id);
+
+        // Only return if it's truly completed (overallProgress 100 or status completed)
+        if (e.status === "completed" || e.status === "finished" || (p && p.overallProgress >= 100)) {
+          return {
+            ...courseData.toObject(),
+            completedAt: e.completedAt || e.updatedAt,
+            progress: p ? p.overallProgress : 100
+          };
+        }
+
+        console.log(`[Enrollment] Course ${courseData.title} is not actually completed (${p?.overallProgress || 0}%)`);
+        return null; // Filtered out later
+      } catch (err) {
+        console.error(`[Enrollment] Error syncing progress for completed course ${courseData._id}:`, err);
+        return {
+          ...courseData.toObject(),
+          completedAt: e.completedAt || e.updatedAt,
+          progress: 100 // fallback
+        };
+      }
+    }));
+
+    const validCourses = courses.filter(c => c !== null);
+    console.log(`[Enrollment] Returning ${validCourses.length} verified completed courses`);
+
+    sendResponse(res, 200, "Completed courses fetched", validCourses);
   } catch (err) {
-    next(err)
+    console.error("[Enrollment] Critical error in getCompletedEnrollments:", err);
+    next(err);
   }
 }
 
