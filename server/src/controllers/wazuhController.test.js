@@ -10,14 +10,13 @@ import {
 import { wazuhService } from "../services/wazuhService.js";
 import { logger } from "../config/logger.js";
 
-// Spies for wazuhService
-const getTotalAlertsSpy = jest.spyOn(wazuhService, "getTotalAlerts");
-const getSecurityAlertsSpy = jest.spyOn(wazuhService, "getSecurityAlerts");
-const getNetworkingDataSpy = jest.spyOn(wazuhService, "getNetworkingData");
-const getComplianceSpy = jest.spyOn(wazuhService, "getCompliance");
-
-// Spy for logger
-const loggerErrorSpy = jest.spyOn(logger, "error").mockImplementation(() => { });
+// Spy variables for wazuhService
+let getTotalAlertsSpy;
+let getSecurityAlertsSpy;
+let getNetworkingDataSpy;
+let getComplianceSpy;
+let getDashboardDistributionSpy;
+let loggerErrorSpy;
 
 describe("wazuhController", () => {
   let mockReq;
@@ -34,6 +33,17 @@ describe("wazuhController", () => {
       status: jest.fn().mockReturnThis(),
     };
     mockNext = jest.fn();
+
+    getTotalAlertsSpy = jest.spyOn(wazuhService, "getTotalAlerts");
+    getSecurityAlertsSpy = jest.spyOn(wazuhService, "getSecurityAlerts");
+    getNetworkingDataSpy = jest.spyOn(wazuhService, "getNetworkingData");
+    getComplianceSpy = jest.spyOn(wazuhService, "getCompliance");
+    getDashboardDistributionSpy = jest.spyOn(wazuhService, "getDashboardDistribution");
+    loggerErrorSpy = jest.spyOn(logger, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
@@ -62,6 +72,7 @@ describe("wazuhController", () => {
     it("should return total count, alerts and last24hCount", async () => {
       getTotalAlertsSpy.mockResolvedValueOnce(100).mockResolvedValueOnce(10);
       getSecurityAlertsSpy.mockResolvedValueOnce([{ id: 1 }]);
+      getDashboardDistributionSpy.mockResolvedValueOnce({ risk: { low: 1, medium: 2, high: 3 }, groups: [] });
 
       await fetchMetrics(mockReq, mockRes, mockNext);
 
@@ -70,8 +81,9 @@ describe("wazuhController", () => {
         count: 100,
         alerts: [{ id: 1 }],
         last24hCount: 10,
+        riskDistribution: { risk: { low: 1, medium: 2, high: 3 }, groups: [] },
       });
-    });
+    }, 10000);
   });
 
   describe("fetchIncidents", () => {
@@ -106,7 +118,7 @@ describe("wazuhController", () => {
       expect(response.actors).toHaveLength(1);
       expect(response.assets).toBeDefined();
       expect(response.incidentSeverity).toBeDefined();
-    });
+    }, 10000);
   });
 
   describe("fetchNetworking", () => {

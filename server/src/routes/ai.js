@@ -2,6 +2,7 @@ import express from 'express';
 import ollama from 'ollama';
 
 import { wazuhService } from '../services/wazuhService.js';
+import { filterPrompt } from '../services/promptFilter.js';
 
 const router = express.Router();
 
@@ -35,6 +36,15 @@ router.post('/summarize-dashboard', async (req, res) => {
     try {
         const { userPrompt, history } = req.body;
 
+        // Check if prompt is allowed
+        const filterResult = filterPrompt(userPrompt);
+        if (!filterResult.allowed) {
+            return res.status(200).json({
+                blocked: true,
+                summary: filterResult.message
+            });
+        }
+
         // 1. Fetch Real Data Server-Side (Don't rely on frontend stats)
         let stats = {
             totalAlerts: 0,
@@ -50,7 +60,7 @@ router.post('/summarize-dashboard', async (req, res) => {
                 wazuhService.getAlertCount({ timeRange: '24h' }),
                 wazuhService.getAlertCount({ timeRange: '24h', level: 7 }),
                 wazuhService.getSecurityAlerts({ size: 50, timeRange: '24h' }),
-                wazuhService.getRiskDistribution()
+                wazuhService.getDashboardDistribution()
             ]);
 
             // If empty, try historical data (last 30 days) before mock
@@ -68,11 +78,8 @@ router.post('/summarize-dashboard', async (req, res) => {
             stats.activeIncidents = incidentsCount || 0;
             stats.recentIncidents = recentAlerts || [];
 
-            if (risk && risk.levels) {
-                stats.riskDistribution = risk.levels.reduce((acc, curr) => {
-                    acc[`Level ${curr.key}`] = curr.doc_count;
-                    return acc;
-                }, {});
+            if (risk && risk.risk) {
+                stats.riskDistribution = risk.risk;
             }
         } catch (err) {
             console.error("Failed to fetch real Wazuh data for AI:", err.message);
